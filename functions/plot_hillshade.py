@@ -100,28 +100,28 @@ def _whitebox_diff_from_mean(dem_tif, out_tif, filterx=25, filtery=25):
 
 
 def plot_hillshade(
-    shp_path,
-    nc_path,
+    shp_path = str(DATA_DIR / "cities_of_interest.shp"),
+    nc_path = str(DATA_DIR / "COtopography.nc"),
     elev_var="HGT",
-    lon_name="longitude",
-    lat_name="latitude",
-    bbox=COLORADO_BBOX,
-    downsample=1,
-    color_map="Greys_r",
-    method="diff_from_mean",
-    filter_size=25,
-    city_names="default",
-    azimuth=315.0,
-    altitude=55.0,
-    zfactor=0.00001,   # degrees -> meters fudge, see docstring
-    cmap=None,
-    topo_alpha=0.6,
-    city_color="crimson",
-    city_size=50,
-    label_fontsize=9,
-    label_offset=(0.04, 0.04),
-    figsize=(12, 8),
-    ax=None,
+lon_name="longitude",
+lat_name="latitude",
+bbox=COLORADO_BBOX,
+downsample=1,
+color_map="Greys_r",
+method="hillshade",              # was "diff_from_mean"
+filter_size=25,
+city_names="default",
+azimuth=320.0,                   # was 315.0
+altitude=25.0,                   # was 55.0
+zfactor=0.05,                    # was 0.00001
+cmap=None,
+topo_alpha=0.3,                  # was 0.6
+city_color="crimson",
+city_size=50,
+label_fontsize=9,
+label_offset=(0.04, 0.04),
+figsize=(12, 8),
+ax=None
 ):
     """Plot a Whitebox hillshade under city points + labels.
 
@@ -295,16 +295,6 @@ def plot_hillshade(
 
 
 if __name__ == "__main__":
-    fig, ax = plot_hillshade(
-        str(DATA_DIR / "cities_of_interest.shp"),
-        str(DATA_DIR / "COtopography.nc"),
-        downsample=1,
-        color_map="Greys_r",
-        topo_alpha=0.3,
-        method="hillshade",
-        zfactor=0.05,
-        azimuth=320.0,
-        altitude=25.0,
-    )
+    fig, ax = plot_hillshade()
 
 
