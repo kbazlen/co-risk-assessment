@@ -10,7 +10,11 @@ import rasterio
 from rasterio.transform import from_bounds
 import xarray as xr
 
+from pathlib import Path
 
+# At the top of the file (after imports)
+SCRIPT_DIR = Path(__file__).resolve().parent
+DATA_DIR = SCRIPT_DIR / "supporting_data_for_hillshade"
 # Colorado state bounding box (lon_min, lat_min, lon_max, lat_max), WGS84
 COLORADO_BBOX = (-109.05, 36.99, -102.04, 41.01)
 
@@ -292,19 +296,15 @@ def plot_hillshade(
 
 if __name__ == "__main__":
     fig, ax = plot_hillshade(
-        '/Users/bridgerhuhn/Documents/COWY_Engine/CO climate roadmap/DATA/CO_data/cities_of_interest.shp',
-        '/Users/bridgerhuhn/Documents/COWY_Engine/CO climate roadmap/DATA/CO_data/COtopography.nc',
+        str(DATA_DIR / "cities_of_interest.shp"),
+        str(DATA_DIR / "COtopography.nc"),
         downsample=1,
-        color_map="Greys_r", ### use "Greys_r" or "Greys"
-        topo_alpha=0.3, ##opacity of the hillshade layer
-        method = "hillshade", ## use either "diff_from_mean" or "hillshade"
-        zfactor=0.05, ## adjust as needed to get good contrast for hillshade; smaller for unprojected DEMs in degrees, larger for projected DEMs in meters
+        color_map="Greys_r",
+        topo_alpha=0.3,
+        method="hillshade",
+        zfactor=0.05,
         azimuth=320.0,
         altitude=25.0,
     )
-    #out = "/mnt/user-data/outputs/cities_hillshade.png"
-    #os.makedirs(os.path.dirname(out), exist_ok=True)
-    #fig.savefig(out, dpi=150, bbox_inches="tight")
-    #print("saved", out)
 
 
