@@ -1,5 +1,5 @@
 """
-Reusable plotting functions for consistant basemaps 
+Reusable plotting functions for consistant basemaps
 """
  
 from itertools import count
@@ -11,6 +11,7 @@ from rasterio.plot import show as rio_show
 import geopandas as gpd
 from pathlib import Path
 import numpy as np
+import re
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rasterio.crs import CRS
 from matplotlib.patches import PathPatch
@@ -117,7 +118,7 @@ def make_basemap(
 
     return fig, ax
 
-def plot_raster(path, cmap="viridis", title="", cbar_label="", vmin=None, vmax=None,
+def plot_raster(path, cmap="viridis", title="", cbar_label="", alpha = 1, vmin=None, vmax=None,
                 nodata=None, ax=None):
     """
     Plot a raster file with reprojection to Web Mercator (EPSG:4326).
@@ -197,7 +198,7 @@ def plot_raster(path, cmap="viridis", title="", cbar_label="", vmin=None, vmax=N
     if ax is None:
         fig, ax = plt.subplots(figsize=(12, 10))
     else:
-        fig = ax.figure
+        fig = ax.get_figure()
 
     # Set vmin/vmax from data if not provided
     if vmin is None:
@@ -209,6 +210,7 @@ def plot_raster(path, cmap="viridis", title="", cbar_label="", vmin=None, vmax=N
     img = ax.imshow(
         out_data, cmap=cmap, vmin=vmin, vmax=vmax,
         extent=[left, right, bottom, top], origin="upper",
+        alpha = alpha,
     )
 
     ax.set_title(title, fontsize=16)
@@ -216,3 +218,24 @@ def plot_raster(path, cmap="viridis", title="", cbar_label="", vmin=None, vmax=N
     cbar.set_label(cbar_label, fontsize=12)
 
     return fig, ax, img
+
+
+def extract_gwl(filename, decimal=False):
+    """
+    Pull a GWL label out of a tif filename.
+    
+    decimal=False → returns '11°C' or '2°C' (raw, good for filenames)
+    decimal=True  → returns '1.1°C' or '2°C' (formatted, good for titles)
+    
+    Returns None if no GWL found.
+    """
+    match = re.search(r'GWL([\d.]+)C', filename)
+    if not match:
+        return None
+    
+    value = match.group(1)
+    
+    if decimal and '.' not in value and len(value) >= 2:
+        value = f"{value[0]}.{value[1:]}"
+    
+    return f"{value}°C"

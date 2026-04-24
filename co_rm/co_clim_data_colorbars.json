@@ -49,6 +49,32 @@
                 }
             }
         },
+        "Rx5day": {
+            "subtypes": {
+                "standard": {
+                    "colors": ["#fafdfa","#d4efdd","#9ae0c5","#26d0b8","#0cb5b0","#1e98a2","#2e7c90","#366079","#35475f","#2d2f44"],
+                    "values": ["..."],
+                    "special": {
+                        "values_inches": ["..."]
+                    }
+                },
+                "abs-change": {
+                    "colors": ["#452736","#7c4d57","#b27a71","#dea884","#ecdcc5","#ffffff","#c2e6d3","#4dc6af","#2a9695","#1f636e"],
+                    "values": ["..."],
+                    "special": {
+                        "values_inches": ["..."],
+                        "notes": ["","","","","","","","","",""]
+                    }
+                },
+                "rel-change": {
+                    "colors": ["#452736","#7c4d57","#b27a71","#dea884","#ecdcc5","#ffffff","#c2e6d3","#4dc6af","#2a9695","#1f636e"],
+                    "values": ["..."],
+                    "special": {
+                        "notes": ["","","","","","","","","",""]
+                    }
+                }
+            }
+        },
         "snowfall": {
             "subtypes": {
                 "standard": {
