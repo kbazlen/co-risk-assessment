@@ -9,7 +9,7 @@ pip install rasterio geopandas numpy shapely
 
 ### 2. Process your tiffs → JSON
 ```bash
-python process_tiffs.py \
+python scripts/process_tiffs.py \
   --geojson path/to/counties.geojson \
   --tiffs   path/to/Climate_Projections \
   --out     data
@@ -29,15 +29,32 @@ python -m http.server 8000
 ## Deploy to GitHub Pages (shareable link)
 
 ```
-your-repo/
+jobs/
 ├── index.html
+├── hillshade-cities-addon.js
+├── INTEGRATION.md
+├── README.md
 ├── data/
 │   ├── manifest.json
 │   ├── sectors.json
-│   ├── wbgt.json
+│   ├── hail.json
+│   ├── hail_raster.json
+│   ├── rx1day.json
+│   ├── rx1day_raster.json
+│   ├── rx5day.json
+│   ├── rx5day_raster.json
 │   ├── tx90f.json
-│   └── ...
-└── process_tiffs.py   (optional, keep for reference)
+│   ├── tx90f_raster.json
+│   ├── tx95f.json
+│   ├── tx95f_raster.json
+│   ├── txn65f.json
+│   ├── txn65f_raster.json
+│   ├── wbgt.json
+│   ├── wbgt_raster.json
+│   ├── wind_ann.json
+│   └── wind_ann_raster.json
+└── scripts/
+    └── process_tiffs.py
 ```
 
 1. Create a GitHub repo (can be private if you add collaborators, or public for open access)
@@ -58,8 +75,8 @@ Anyone with the link can use it — no login, no server, completely free.
 
 ## Adding a new hazard layer
 
-1. Add a new entry to `HAZARD_CATALOG` in `process_tiffs.py`
-2. Re-run `process_tiffs.py` — it only regenerates changed hazards
+1. Add a new entry to `HAZARD_CATALOG` in `scripts/process_tiffs.py`
+2. Re-run `scripts/process_tiffs.py` — it only regenerates changed hazards
 3. Drop the new JSON into `data/`
 4. `manifest.json` updates automatically — dashboard picks it up on next load
 
@@ -67,7 +84,7 @@ Anyone with the link can use it — no login, no server, completely free.
 
 ## Adjusting sector exposure weights
 
-Edit `SECTOR_META` in `process_tiffs.py`. Each sector has:
+Edit `SECTOR_META` in `scripts/process_tiffs.py`. Each sector has:
 - `outdoor_weight` — share of workers with meaningful outdoor/weather exposure (0.0–1.0)
 - `hazards` — which hazard types affect this sector: `"heat"`, `"extreme_heat"`, `"wind"`, `"precip"`
 
@@ -79,9 +96,9 @@ Re-run the script to regenerate the JSON with updated scores.
 
 | File | Approx. size |
 |------|-------------|
-| `manifest.json` | < 5 KB |
-| `sectors.json` | < 10 KB |
-| Per-hazard JSON (64 counties) | 50–150 KB |
-| Total data folder | ~1 MB |
+| `data/manifest.json` | < 5 KB |
+| `data/sectors.json` | < 10 KB |
+| Per-hazard JSON in `data/` (64 counties) | 50–150 KB |
+| Total data folder | ~3 MB |
 
 The full dashboard loads in under 1 second on a normal connection.
