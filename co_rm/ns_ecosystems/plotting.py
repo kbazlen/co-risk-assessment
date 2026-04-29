@@ -43,6 +43,82 @@ FINALMODST_ORDER        = ["V", "G", "F", "P", "U", "NKP"]
 FINALMODST_LEGEND_TITLE = "Conservation Protection Status"
 
 
+layers = {
+    "drought__D1": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/pct_change_Aridity/pct_change_Aridity_*_D1_timescale_12months.tif",
+        "subtype": "rel-change",
+        "vmin": None,
+        "vmax": None,
+        "label": "Change in D1 Drought Exposure",
+        "cbar_label": "Drought Exposure"
+    },
+    "drought__D2": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/pct_change_Aridity/pct_change_Aridity_*_D2_timescale_12months.tif",
+        "subtype": "rel-change",
+        "vmin": None,
+        "vmax": None,
+        "label": "Change in D2 Drought Exposure",
+        "cbar_label": "Drought Exposure"
+    },
+    "drought__D3": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/pct_change_Aridity/pct_change_Aridity_*_D3_timescale_12months.tif",
+        "subtype": "rel-change",
+        "vmin": None,
+        "vmax": None,
+        "label": "Change in D3 Drought Exposure",
+        "cbar_label": "Drought Exposure"
+    },
+    "drought__D4": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/pct_change_Aridity/pct_change_Aridity_*_D4_timescale_12months.tif",
+        "subtype": "rel-change",
+        "vmin": None,
+        "vmax": None,
+        "label": "Change in D4 Drought Exposure",
+        "cbar_label": "Drought Exposure"
+    },
+    "snowfall": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/snow_fraction/snow_fraction_relative_apr.tif",
+        "subtype": "rel-change",
+        "vmin": None,
+        "vmax": None,
+        "label": "Difference in Percent of Precipitation Received as Snow (April)",
+        "cbar_label": "Snowfall"
+    },
+    "Days Exceeding 95th Percentile Maximum Temperature": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/severe_heat/TX95p_GWL*C_minus_REF_absoule_change_v2.tif",
+        "subtype": "abs-change",
+        "cmap": "Reds",
+        "vmin": None,
+        "vmax": None,
+        "label": "Days Exceeding 95th Percentile Maximum Temperature",
+        "cbar_label": "Days"
+    },
+    "Change in Number of Frost Days": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/FD/FD_GWL*C_minus_REF_absoule_change_v2.tif",
+        "subtype": "abs-change",
+        "cmap": "PuBu_r",
+        "vmin": None,
+        "vmax": None,
+        "label": "Change in Number of Frost Days",
+        "cbar_label": "Days"
+    },
+    "Rx1day": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/Rx1day/Rx1day_GWL*C_minus_REF_absoule_change_v2.tif",
+        "subtype": "abs-change",
+        "vmin": None,
+        "vmax": None,
+        "label": "Change in Maximum 1-Day Precipitation",
+        "cbar_label": "mm"
+    },
+    "Rx1day__5day": {
+        "path": "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/Rx5day/Rx5day_GWL*C_minus_REF_absoule_change_v2.tif",
+        "subtype": "abs-change",
+        "vmin": None,
+        "vmax": None,
+        "label": "Change in Maximum 5-Day Precipitation",
+        "cbar_label": "mm"
+    },
+}
 def shapely_to_mpl_path(geom):
     "Convert a Shapely geometry to a Matplotlib Path object"
     vertices, codes = [], []

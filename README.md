@@ -8,3 +8,4 @@ Repository for analsis for the Colorado Climate Resilience Roadmap.
 4. cd into the repo cloned in 1.
 5. prior to running pip below, make sure the branch is correct (install from main!)
 6. Install the repo and its dependencies by running: `pip install -e .` (or `pip install -e .[ml]` to also install ML stack, see .toml)
+
