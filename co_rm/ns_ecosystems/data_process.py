@@ -1,5 +1,10 @@
+from __future__ import annotations
+
+from pathlib import Path
+
 import numpy as np
 import rasterio
+from rasterio.transform import from_bounds
 from rasterio.warp import reproject, calculate_default_transform
 from rasterio.enums import Resampling
 
@@ -156,4 +161,73 @@ def unflatten_to_raster(values, mask_2d, fill=-1, dtype=int):
     out = np.full(mask_2d.shape, fill, dtype=dtype)
     out[mask_2d] = values
     return out
+
+
+def upsample_raster_to_climate_grid(
+    path_raster: str | Path,
+    path_climate_ref: str | Path,
+    out_path: str | Path,
+    dst_crs: str = "EPSG:4326",
+) -> Path:
+    """
+    Reproject the fine-resolution conservation raster onto the coarser
+    climate grid and save as a GeoTIFF.  Run once; all subsequent analyses
+    can read the saved file instead of reprojecting every time.
+
+    Parameters
+    ----------
+    path_raster : path to the high-resolution raster to be upsampled.
+    path_climate_ref : path to any climate raster whose resolution defines
+        the target grid.
+    out_path : where to write the upsampled raster GeoTIFF.
+    dst_crs : CRS for the output grid.
+
+    Returns
+    -------
+    Path to the saved raster.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Build the target grid from the *climate* raster (coarser)
+    transform, width, height = build_reference_grid(str(path_climate_ref), dst_crs=dst_crs)
+
+    # Reproject raster onto that grid (nearest preserves categorical scores)
+    cs_aligned = reproject_to_grid(
+        str(path_raster), transform, width, height,
+        dst_crs=dst_crs, resampling=Resampling.nearest,
+    )
+
+    # Write out
+    profile = {
+        "driver": "GTiff",
+        "dtype": "float32",
+        "width": width,
+        "height": height,
+        "count": 1,
+        "crs": dst_crs,
+        "transform": transform,
+        "nodata": np.nan,
+        "compress": "deflate",
+    }
+    with rasterio.open(out_path, "w", **profile) as dst:
+        dst.write(cs_aligned, 1)
+
+    print(f"Saved upsampled raster ({height}x{width}) → {out_path}")
+    return out_path
+
+
+if __name__ == "__main__":
+    path_cs = Path(
+        "/Users/kylabazlen/Documents/Climate_Roadmap/Ecosystems/eco_data/"
+        "COStatewideConservationSummaryV8/TIF_File/ConservationSummaryV8_NoTribalLands.tif"
+    )
+    path_climate_ref = Path(
+        "/Users/kylabazlen/Documents/Climate_Roadmap/clim_data/Tx95/"
+        "TX95p_GWL20C_minus_REF_absoule_change_v2.tif"
+    )
+    # Save in the same directory as the CS raster
+    out_path = path_cs.parent / "ConservationSummaryV8_climate_grid.tif"
+
+    upsample_raster_to_climate_grid(path_cs, path_climate_ref, out_path)
 

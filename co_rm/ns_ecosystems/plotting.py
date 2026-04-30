@@ -42,6 +42,28 @@ FINALMODST_LABELS = {
 FINALMODST_ORDER        = ["V", "G", "F", "P", "U", "NKP"]
 FINALMODST_LEGEND_TITLE = "Conservation Protection Status"
 
+# Vegetation COWRA22 VAT labels
+VEG_LABELS = {
+    1: "Agriculture",
+    3: "Grassland",
+    5: "Lodgepole Pine",
+    6: "Mixed Conifer",
+    7: "Oak Shrubland",
+    8: "Open Water",
+    9: "Pinyon-Juniper",
+    10: "Ponderosa Pine",
+    11: "Riparian",
+    12: "Shrubland",
+    13: "Spruce-Fir",
+    14: "Developed",
+    15: "Sparsely Vegetated",
+    16: "Hardwood",
+    17: "Conifer-Hardwood",
+    18: "Conifer",
+    19: "Barren",
+}
+
+
 
 layers = {
     "drought__D1": {
@@ -250,3 +272,251 @@ def add_bivariate_legend(
                    ha="center", fontsize=fontsize, rotation=90)
 
     return legend_ax
+
+
+def plot_elevation_scatter(
+    cs_arr,
+    hazard_arr,
+    elev_arr,
+    bivar_colors,
+    hazard_label="Hazard",
+    title=None,
+    n_classes=3,
+    point_size=8,
+    alpha=0.8,
+    max_points=50_000,
+    figsize=(10, 7),
+):
+    """
+    Scatter plot of elevation vs. Conservation × Hazard product, colored by
+    bivariate nonant class.
+
+    Parameters
+    ----------
+    cs_arr, hazard_arr, elev_arr : 2D np.ndarray
+        Aligned arrays (same shape). Can contain NaN for invalid pixels.
+    bivar_colors : dict {int -> color}
+        9-class bivariate color mapping.
+    hazard_label : str
+        Label for the hazard axis/legend.
+    title : str or None
+        Plot title. Auto-generated if None.
+    n_classes : int
+        Number of classes per axis (default 3 → 9 nonants).
+    max_points : int
+        Subsample to this many points for faster rendering.
+    figsize : tuple
+
+    Returns
+    -------
+    fig, (ax, legend_ax)
+    """
+    # Flatten and mask to valid
+    cs_flat = cs_arr.flatten()
+    haz_flat = hazard_arr.flatten()
+    elev_flat = elev_arr.flatten()
+
+    mask = np.isfinite(cs_flat) & np.isfinite(haz_flat) & np.isfinite(elev_flat)
+    cs_v = cs_flat[mask]
+    haz_v = haz_flat[mask]
+    elev_v = elev_flat[mask]
+
+    # Compute product and bivariate class codes
+    product = cs_v * haz_v
+    qs = np.linspace(0, 1, n_classes + 1)[1:-1]
+    cs_breaks = np.quantile(cs_v, qs)
+    haz_breaks = np.quantile(haz_v, qs)
+    codes = np.digitize(haz_v, haz_breaks) * n_classes + np.digitize(cs_v, cs_breaks)
+
+    # Subsample if needed
+    if len(product) > max_points:
+        rng = np.random.default_rng(42)
+        idx = rng.choice(len(product), size=max_points, replace=False)
+        product = product[idx]
+        elev_v = elev_v[idx]
+        codes = codes[idx]
+
+    colors = np.array([bivar_colors[c] for c in codes])
+
+    if title is None:
+        title = f"Elevation vs. Conservation × {hazard_label}, colored by nonant"
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.scatter(product, elev_v, c=colors, s=point_size, alpha=alpha, edgecolors="none")
+    ax.set_xlabel(f"Conservation score × {hazard_label.lower()}", fontsize=12)
+    ax.set_ylabel("Elevation (m)", fontsize=12)
+    ax.set_title(title, fontsize=13, fontweight="bold")
+
+    plt.subplots_adjust(right=0.78)
+
+    legend_ax = fig.add_axes([0.82, 0.25, 0.15, 0.28])
+    for i in range(n_classes):
+        for j in range(n_classes):
+            code = i * n_classes + j
+            legend_ax.add_patch(plt.Rectangle(
+                (j, i), 1, 1,
+                facecolor=bivar_colors[code],
+                edgecolor="white", linewidth=1.5,
+            ))
+    legend_ax.set_xlim(-0.3, n_classes + 0.3)
+    legend_ax.set_ylim(-0.7, n_classes + 0.5)
+    legend_ax.set_aspect("equal")
+    legend_ax.set_xticks([])
+    legend_ax.set_yticks([])
+    legend_ax.spines[:].set_visible(False)
+    legend_ax.annotate("", xy=(n_classes + 0.15, 0), xytext=(0, 0),
+                       arrowprops=dict(arrowstyle="->", color="black", lw=1.4))
+    legend_ax.annotate("", xy=(0, n_classes + 0.15), xytext=(0, 0),
+                       arrowprops=dict(arrowstyle="->", color="black", lw=1.4))
+    legend_ax.text(n_classes / 2, -0.6, "Conservation →", ha="center", fontsize=9)
+    legend_ax.text(-0.5, n_classes / 2, f"{hazard_label} →", ha="center", fontsize=9, rotation=90)
+
+    return fig, (ax, legend_ax)
+
+
+def plot_veg_composition(
+    bivar_map,
+    veg_aligned,
+    bivar_colors,
+    hazard_label="Hazard",
+    title=None,
+    veg_labels=None,
+    sort_by="size",
+    figsize=None,
+):
+    """
+    Stacked horizontal bar chart showing the nonant composition of each
+    vegetation class, with a companion total-pixels bar and 3x3 legend.
+
+    Parameters
+    ----------
+    bivar_map : 2D np.ndarray
+        Bivariate classification (0–8, -1 for NA). Same shape as veg_aligned.
+    veg_aligned : 2D np.ndarray
+        Vegetation class raster aligned to the same grid. NaN for invalid.
+    bivar_colors : dict {int -> color}
+        9-class bivariate color mapping (keys 0–8).
+    hazard_label : str
+        Label for the warming/hazard axis legend.
+    title : str or None
+        Plot title. Auto-generated if None.
+    veg_labels : dict or None
+        Mapping of integer class codes to label strings. Defaults to VEG_LABELS.
+    sort_by : str
+        One of 'refugia', 'at_risk', 'size', 'alpha'.
+    figsize : tuple or None
+
+    Returns
+    -------
+    fig, (ax, ax2, legend_ax)
+    """
+    if veg_labels is None:
+        veg_labels = VEG_LABELS
+
+    # Flatten and mask
+    veg_flat = veg_aligned.flatten()
+    bivar_flat = bivar_map.flatten()
+    valid = np.isfinite(veg_flat) & (bivar_flat >= 0)
+
+    veg_valid = veg_flat[valid].astype(int)
+    bivar_valid = bivar_flat[valid].astype(int)
+
+    # Cross-tabulate
+    unique_veg = np.unique(veg_valid)
+    n_veg = len(unique_veg)
+    counts = np.zeros((n_veg, 9), dtype=int)
+    for i, v in enumerate(unique_veg):
+        mask_v = veg_valid == v
+        for code in range(9):
+            counts[i, code] = np.sum(bivar_valid[mask_v] == code)
+
+    # Proportions (row-normalized)
+    row_totals = counts.sum(axis=1, keepdims=True)
+    proportions = np.where(row_totals > 0, 100.0 * counts / row_totals, 0)
+
+    # Build label list
+    cat_labels = [veg_labels.get(int(v), f"Class {int(v)}") for v in unique_veg]
+
+    # Sort
+    totals = counts.sum(axis=1)
+    if sort_by == "refugia":
+        sort_key = proportions[:, [0, 1, 2]].sum(axis=1)
+        sort_idx = np.argsort(sort_key)[::-1]
+    elif sort_by == "at_risk":
+        sort_idx = np.argsort(proportions[:, 8])[::-1]
+    elif sort_by == "size":
+        sort_idx = np.argsort(totals)[::-1]
+    elif sort_by == "alpha":
+        sort_idx = np.argsort(cat_labels)
+    else:
+        sort_idx = np.arange(n_veg)
+
+    sorted_props = proportions[sort_idx]
+    sorted_totals = totals[sort_idx]
+    sorted_labels = [cat_labels[i] for i in sort_idx]
+
+    if figsize is None:
+        figsize = (14, max(5, 0.45 * len(sorted_labels)))
+
+    if title is None:
+        title = f"Vegetation composition by nonant — {hazard_label}"
+
+    # Plot
+    fig, (ax, ax2) = plt.subplots(
+        1, 2, figsize=figsize,
+        gridspec_kw={"width_ratios": [4, 1], "wspace": 0.05},
+        sharey=True,
+    )
+
+    y_pos = np.arange(len(sorted_labels))
+    left = np.zeros(len(sorted_labels))
+
+    for nonant in range(9):
+        widths = sorted_props[:, nonant]
+        ax.barh(y_pos, widths, left=left,
+                color=bivar_colors[nonant],
+                edgecolor="white", linewidth=0.5)
+        left += widths
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(sorted_labels, fontsize=10)
+    ax.invert_yaxis()
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("% of vegetation class")
+    ax.set_title(title, fontsize=12, fontweight="bold", loc="left")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    ax2.barh(y_pos, sorted_totals, color="#555555")
+    ax2.set_xlabel("Total pixels")
+    ax2.set_xscale("log")
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_visible(False)
+    ax2.tick_params(labelsize=8)
+
+    plt.subplots_adjust(right=0.82)
+
+    # 3x3 legend
+    legend_ax = fig.add_axes([0.86, 0.35, 0.12, 0.3])
+    for i in range(3):
+        for j in range(3):
+            code = i * 3 + j
+            legend_ax.add_patch(plt.Rectangle(
+                (j, i), 1, 1,
+                facecolor=bivar_colors[code],
+                edgecolor="white", linewidth=1.5,
+            ))
+    legend_ax.set_xlim(-0.3, 3.3)
+    legend_ax.set_ylim(-0.7, 3.5)
+    legend_ax.set_aspect("equal")
+    legend_ax.set_xticks([])
+    legend_ax.set_yticks([])
+    legend_ax.spines[:].set_visible(False)
+    legend_ax.annotate("", xy=(3.15, 0), xytext=(0, 0),
+                       arrowprops=dict(arrowstyle="->", color="black", lw=1.4))
+    legend_ax.annotate("", xy=(0, 3.15), xytext=(0, 0),
+                       arrowprops=dict(arrowstyle="->", color="black", lw=1.4))
+    legend_ax.text(1.5, -0.6, "Conservation →", ha="center", fontsize=9)
+    legend_ax.text(-0.5, 1.5, f"{hazard_label} →", ha="center", fontsize=9, rotation=90)
+
+    return fig, (ax, ax2, legend_ax)
