@@ -31,6 +31,7 @@ python -m http.server 8000
 ```
 jobs/
 ├── index.html
+├── regional exposure.html
 ├── hillshade-cities-addon.js
 ├── INTEGRATION.md
 ├── README.md
@@ -57,6 +58,15 @@ jobs/
     └── process_tiffs.py
 ```
 
+### Available Pages:
+
+- **Main Dashboard:** `https://kbazlen.github.io/co-risk-assessment/jobs/`
+- **Regional Exposure:** `https://kbazlen.github.io/co-risk-assessment/jobs/regional%20exposure.html`
+
+---
+
+## Deployment Steps
+
 1. Create a GitHub repo (can be private if you add collaborators, or public for open access)
 2. Push your folder:
    ```bash
@@ -67,7 +77,7 @@ jobs/
    git push -u origin main
    ```
 3. Go to **Settings → Pages → Source: main branch / root**
-4. Your dashboard is live at `https://YOUR_ORG.github.io/colorado-climate-jobs/`
+4. Your dashboard is live at the URLs listed above
 
 Anyone with the link can use it — no login, no server, completely free.
 
