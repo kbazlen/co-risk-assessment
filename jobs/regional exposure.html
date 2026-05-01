@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regional Exposure Summary · Colorado Climate Hazards</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,300&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,600;1,8..60,300&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f0f3f8;--bg2:#ffffff;--bg3:#e4eaf4;--border:rgba(26,39,86,0.12);--border2:rgba(26,39,86,0.22);--text:#1a2756;--muted:#5a6a8a;--accent:#b8860b;--accent2:#1a5fa0;--navy:#1a2756;--today:#2d6a2d;--warm:#c89800;--font-sans:'Source Sans 3',sans-serif;--font-disp:'Source Serif 4',Georgia,serif;--r:4px;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:13px;min-height:100vh;}
+#header{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:3px solid var(--accent);background:var(--navy);position:sticky;top:0;z-index:100;gap:16px;}
+#header h1{font-family:var(--font-disp);font-weight:300;font-size:17px;letter-spacing:-0.01em;white-space:nowrap;color:#ffffff;}
+#header h1 span{color:#f0c040;font-style:italic;}
+.legend{display:flex;align-items:center;gap:20px;flex-shrink:0;}
+.leg-item{display:flex;align-items:center;gap:7px;font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:0.08em;white-space:nowrap;}
+.leg-swatch{width:22px;height:10px;border-radius:2px;}
+.leg-today{background:var(--today);}
+.leg-warm{background:var(--warm);}
+#intro{padding:16px 32px;border-bottom:1px solid var(--border2);display:flex;align-items:baseline;gap:20px;background:#fff;}
+#intro p{font-size:12px;color:#3a4a6a;line-height:1.6;}
+.tag{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--navy);font-weight:700;white-space:nowrap;flex-shrink:0;border:1px solid rgba(26,39,86,0.2);padding:2px 8px;border-radius:3px;}
+#config-panel{margin:20px 32px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:20px;box-shadow:0 1px 6px rgba(26,39,86,0.08);}
+#config-panel h2{font-family:var(--font-disp);font-weight:600;font-size:15px;margin-bottom:4px;color:var(--navy);}
+#config-panel p{font-size:12px;color:#3a4a6a;margin-bottom:16px;}
+.config-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
+.config-row{display:flex;flex-direction:column;gap:5px;}
+.config-row label{font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--navy);font-weight:600;}
+.config-row select{background:#fff;color:var(--text);border:1px solid var(--border2);border-radius:var(--r);padding:7px 10px;font-family:var(--font-sans);font-size:12px;cursor:pointer;-webkit-appearance:none;appearance:none;}
+.config-row .hint{font-size:9px;color:var(--muted);opacity:0.7;}
+#render-btn{margin-top:16px;padding:9px 22px;background:var(--navy);color:#fff;border:none;border-bottom:3px solid var(--accent);border-radius:var(--r);font-family:var(--font-sans);font-size:12px;font-weight:600;cursor:pointer;letter-spacing:0.05em;transition:opacity 0.15s,transform 0.1s;}
+#render-btn:hover{opacity:0.9;transform:translateY(-1px);}
+#render-btn:disabled{opacity:0.4;cursor:default;}
+#loading{display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:60px;color:var(--muted);}
+#loading p{font-family:var(--font-disp);font-style:italic;font-weight:300;font-size:16px;}
+.spinner{width:24px;height:24px;border:2px solid rgba(26,39,86,0.15);border-top-color:var(--navy);border-radius:50%;animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#chart-area{display:none;padding:20px 32px 40px;background:var(--bg2);margin:0 0 20px;border-top:1px solid var(--border2);}
+#chart-svg{width:100%;display:block;overflow:visible;}
+#error-msg{display:none;margin:20px 32px;background:rgba(200,40,30,0.07);border:1px solid rgba(200,40,30,0.25);border-radius:var(--r);padding:16px;color:#8a2018;font-size:12px;line-height:1.7;}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Colorado <span>Regional Exposure</span> Summary</h1>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-swatch leg-today"></div>Today (1.1°C)</div>
+    <div class="leg-item"><div class="leg-swatch leg-warm"></div>2°C scenario</div>
+  </div>
+</div>
+
+<div id="intro">
+  <span class="tag">Page 21 Recreation</span>
+  <p>Regional mean exposure across Colorado's 9 FACE regions. Select which hazard layers correspond to each metric, then click Generate Chart.</p>
+</div>
+
+<div id="config-panel">
+  <h2>Configure Hazard Layers</h2>
+  <p>Auto-detection is attempted from layer labels. Correct any mismatches using the dropdowns.</p>
+  <div class="config-grid" id="config-grid"></div>
+  <button id="render-btn" disabled>Generate Chart</button>
+</div>
+
+<div id="loading"><div class="spinner"></div><p>Computing regional means…</p></div>
+<div id="error-msg"></div>
+<div id="chart-area"><svg id="chart-svg"></svg></div>
+
+<script>
+const FACE_REGIONS=[
+  {id:"north-mtn", label:"Northern\nMountains",   counties:["Jackson","Routt","Moffat","Rio Blanco"]},
+  {id:"grand-val", label:"Grand\nValley",          counties:["Garfield","Mesa","Delta","Montrose","Ouray"]},
+  {id:"wsj-mtn",  label:"Western\nSan Juan Mtns", counties:["San Miguel","Dolores","Montezuma","San Juan","La Plata","Hinsdale","Archuleta","Mineral"]},
+  {id:"central",  label:"Central\nMountains",      counties:["Grand","Summit","Eagle","Pitkin","Lake","Chaffee","Gunnison"]},
+  {id:"san-luis", label:"San Luis\nValley",         counties:["Saguache","Rio Grande","Alamosa","Conejos","Costilla"]},
+  {id:"s-front",  label:"Southern\nFront Range",   counties:["Park","Teller","El Paso","Fremont","Pueblo","Custer","Huerfano"]},
+  {id:"n-front",  label:"Northern\nFront Range",   counties:["Larimer","Weld","Boulder","Gilpin","Clear Creek","Broomfield","Denver","Adams","Arapahoe","Douglas","Elbert"]},
+  {id:"n-plains", label:"Northern\nPlains",         counties:["Morgan","Logan","Sedgwick","Phillips","Washington","Yuma","Lincoln","Kit Carson"]},
+  {id:"s-plains", label:"Southern\nPlains",         counties:["Cheyenne","Kiowa","Crowley","Otero","Bent","Prowers","Las Animas","Baca"]},
+];
+const METRICS=[
+  {id:"heat",   label:"Heat",    icon:"☀",  metric:"Days above 95°F",            unit:"days",   keywords:["heat","95","extreme_heat","max temp","tmax"]},
+  {id:"fire",   label:"Fire",    icon:"🔥", metric:"Days with FWI > 21",           unit:"days",   keywords:["fire","wildfire","fwi","burn"]},
+  {id:"snow",   label:"Snow",    icon:"❄",  metric:"Snow Water Equivalent (in)",  unit:"inches", keywords:["snow","swe","snowfall","precip-snow"]},
+  {id:"flood",  label:"Flooding",icon:"〜",  metric:"Pluvial flood AAL ($/M)",     unit:"$/M AAL",keywords:["flood","pluvial","aal","flash"]},
+  {id:"drought",label:"Drought", icon:"⌀",  metric:"% of year in drought",        unit:"%",      keywords:["drought","pdsi","water stress","dry"]},
+];
+const HOTSPOTS={
+  heat:   "Southern and Northern Plains",
+  fire:   "Statewide except central mountainous regions",
+  snow:   "Limited changes outside of Central Mountains",
+  flood:  "Statewide, especially Eastern Colorado",
+  drought:"Statewide",
+};
+
+// Layout — all in SVG user-units
+const PAD_LEFT=130, PAD_RIGHT=175, ROW_H=130, REGION_H=40, HDR_H=18;
+const BAR_SCALE=0.33;
+const COLOR_TODAY="#2d6a2d", COLOR_WARM="#c89800";
+const MONO="Source Sans 3,sans-serif", SERIF="Source Serif 4,Georgia,serif";
+
+let manifest=[], selectedHazards={};
+const cache={};
+
+async function init(){
+  try{
+    manifest=await fetch("data/manifest.json").then(r=>{
+      if(!r.ok) throw new Error(`HTTP ${r.status} — cannot load data/manifest.json`);
+      return r.json();
+    });
+    buildConfig();
+  }catch(e){
+    showError(`<strong>Could not load manifest:</strong> ${e.message}<br><br>
+      Serve this file alongside your <code>data/</code> folder using a local server
+      (e.g. <code>python3 -m http.server</code>).`);
+  }
+}
+
+function autoDetect(metric){
+  let best=null,bestScore=0;
+  manifest.forEach(h=>{
+    const txt=(h.id+" "+h.label+" "+(h.description||"")).toLowerCase();
+    const score=metric.keywords.reduce((s,kw)=>s+(txt.includes(kw)?1:0),0);
+    if(score>bestScore){bestScore=score;best=h.id;}
+  });
+  return bestScore>0?best:null;
+}
+
+function buildConfig(){
+  const grid=document.getElementById("config-grid");
+  grid.innerHTML="";
+  METRICS.forEach(metric=>{
+    const det=autoDetect(metric);
+    selectedHazards[metric.id]=det;
+    const row=document.createElement("div");
+    row.className="config-row";
+    row.innerHTML=`
+      <label>${metric.icon} ${metric.label} — ${metric.metric}</label>
+      <select data-metric="${metric.id}">
+        <option value="">— not available —</option>
+        ${manifest.map(h=>`<option value="${h.id}" ${h.id===det?"selected":""}>${h.label} (${h.unit})</option>`).join("")}
+      </select>
+      <span class="hint">${det?"✓ auto-detected":"⚠ not detected — select manually"}</span>`;
+    row.querySelector("select").addEventListener("change",e=>{
+      selectedHazards[metric.id]=e.target.value||null;
+      row.querySelector(".hint").textContent=e.target.value?"✓ selected":"⚠ none selected";
+    });
+    grid.appendChild(row);
+  });
+  const btn=document.getElementById("render-btn");
+  btn.disabled=false;
+  btn.addEventListener("click",renderChart);
+}
+
+function normName(n){return(n||"").toLowerCase().replace(/ county$/i,"").replace(/\s+/g," ").trim();}
+
+function detectScenarios(hid){
+  const gwls=Object.keys(cache[hid]?.counties?.[0]?.scenarios||{});
+  return{
+    today:gwls.find(g=>g==="1.1"||g==="CTL")||gwls[0],
+    warm: gwls.find(g=>g==="2.0")||gwls.find(g=>g==="2.5")||gwls[gwls.length-1]
+  };
+}
+
+function regionalMeans(hid,scenario){
+  const byName={};
+  (cache[hid]?.counties||[]).forEach(c=>{
+    const v=c.scenarios?.[scenario];
+    if(v!=null&&!isNaN(v)) byName[normName(c.name)]=+v;
+  });
+  const out={};
+  FACE_REGIONS.forEach(r=>{
+    const vals=r.counties.map(cn=>byName[normName(cn)]).filter(v=>v!=null);
+    out[r.id]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+  });
+  return out;
+}
+
+async function renderChart(){
+  const btn=document.getElementById("render-btn");
+  btn.disabled=true; btn.textContent="Loading…";
+  document.getElementById("chart-area").style.display="none";
+  document.getElementById("error-msg").style.display="none";
+  document.getElementById("loading").style.display="flex";
+  try{
+    await Promise.all(Object.entries(selectedHazards).filter(([,hid])=>hid).map(async([,hid])=>{
+      if(!cache[hid]){
+        const e=manifest.find(h=>h.id===hid);
+        if(e) cache[hid]=await fetch(e.file).then(r=>r.json());
+      }
+    }));
+    drawSVG();
+    document.getElementById("chart-area").style.display="block";
+  }catch(e){showError(`<strong>Failed to load data:</strong> ${e.message}`);}
+  finally{document.getElementById("loading").style.display="none";btn.disabled=false;btn.textContent="Generate Chart";}
+}
+
+function drawSVG(){
+  const svgEl=document.getElementById("chart-svg");
+  const W=svgEl.parentElement.clientWidth;
+  const chartW=W-PAD_LEFT-PAD_RIGHT;
+  const nR=FACE_REGIONS.length;
+  const groupW=chartW/nR;
+  const barW=groupW*BAR_SCALE;
+  const barGap=barW*0.35;
+  const nM=METRICS.length;
+  const totalH=HDR_H+nM*ROW_H+REGION_H;
+
+  // cx(i) = x-center of region i — ONE definition used everywhere
+  const cx=i=>PAD_LEFT+i*groupW+groupW/2;
+
+  svgEl.setAttribute("viewBox",`0 0 ${W} ${totalH}`);
+  svgEl.setAttribute("height",totalH);
+  svgEl.innerHTML="";
+  const svg=d3.select(svgEl);
+
+  // Hotspot column header
+  svg.append("text")
+    .attr("x",PAD_LEFT+chartW+12).attr("y",HDR_H-3)
+    .attr("font-size",8).attr("font-family",MONO)
+    .attr("letter-spacing","0.07em").attr("fill","#1a5fa0")
+    .text("EXPOSURE HOTSPOTS AT 2°C");
+
+  // Hotspot separator
+  svg.append("line")
+    .attr("x1",PAD_LEFT+chartW).attr("y1",0)
+    .attr("x2",PAD_LEFT+chartW).attr("y2",totalH)
+    .attr("stroke","rgba(26,39,86,0.12)").attr("stroke-width",1);
+
+  // Region dividers (vertical)
+  FACE_REGIONS.forEach((_,i)=>{
+    if(i===0) return;
+    svg.append("line")
+      .attr("x1",cx(i)-groupW/2).attr("y1",HDR_H)
+      .attr("x2",cx(i)-groupW/2).attr("y2",HDR_H+nM*ROW_H)
+      .attr("stroke","rgba(26,39,86,0.08)").attr("stroke-width",1);
+  });
+
+  // ── HAZARD ROWS ──────────────────────────────────────────
+  METRICS.forEach((metric,mi)=>{
+    const rowY=HDR_H+mi*ROW_H;
+    const hid=selectedHazards[metric.id];
+    let tVals={},wVals={};
+    if(hid&&cache[hid]){
+      const{today,warm}=detectScenarios(hid);
+      if(today) tVals=regionalMeans(hid,today);
+      if(warm)  wVals=regionalMeans(hid,warm);
+    }
+
+    // Row bg
+    svg.append("rect")
+      .attr("x",0).attr("y",rowY).attr("width",W).attr("height",ROW_H)
+      .attr("fill",mi%2===0?"rgba(26,39,86,0.025)":"transparent");
+
+    // Row top border
+    svg.append("line")
+      .attr("x1",0).attr("y1",rowY).attr("x2",W).attr("y2",rowY)
+      .attr("stroke","rgba(26,39,86,0.1)");
+
+    // Hazard label
+    svg.append("text").attr("x",0).attr("y",rowY+24)
+      .attr("font-size",16).attr("fill","rgba(26,39,86,0.5)").text(metric.icon);
+    svg.append("text").attr("x",0).attr("y",rowY+45)
+      .attr("font-size",13).attr("font-weight","700")
+      .attr("font-family",SERIF).attr("fill","#1a2756").text(metric.label);
+    svg.append("text").attr("x",0).attr("y",rowY+59)
+      .attr("font-size",8).attr("font-family",MONO).attr("fill","#5a6a8a").text(metric.metric);
+    if(!hid){
+      svg.append("text").attr("x",0).attr("y",rowY+74)
+        .attr("font-size",8).attr("font-family",MONO).attr("fill","#8a2018").text("not configured");
+    }
+
+    // Hotspot text
+    const hotLines=wrapText(HOTSPOTS[metric.id]||"",24);
+    hotLines.forEach((ln,li)=>{
+      svg.append("text")
+        .attr("x",PAD_LEFT+chartW+12)
+        .attr("y",rowY+ROW_H/2-(hotLines.length-1)*7+li*14)
+        .attr("font-size",9.5).attr("font-family",MONO).attr("fill","#5a6a8a")
+        .text(ln);
+    });
+
+    if(!hid) return;
+
+    // Y scale
+    const allV=FACE_REGIONS.flatMap(r=>[tVals[r.id],wVals[r.id]]).filter(v=>v!=null);
+    if(!allV.length) return;
+    const yMax=d3.max(allV);
+    const bAreaH=ROW_H-28, bAreaY=rowY+14;
+    const yPos=v=>bAreaY+bAreaH-(v/yMax)*bAreaH;
+    const fmt=v=>fmtVal(v,metric.id);
+
+    // Baseline
+    svg.append("line")
+      .attr("x1",PAD_LEFT).attr("y1",bAreaY+bAreaH)
+      .attr("x2",PAD_LEFT+chartW).attr("y2",bAreaY+bAreaH)
+      .attr("stroke","rgba(26,39,86,0.2)").attr("stroke-width",1);
+
+    // Bars — positioned using the SAME cx() as the region labels below
+    FACE_REGIONS.forEach((r,i)=>{
+      const x1=cx(i)-barGap/2-barW;
+      const x2=cx(i)+barGap/2;
+      const tv=tVals[r.id], wv=wVals[r.id];
+
+      if(tv!=null){
+        const by=yPos(tv), bh=Math.max(2,bAreaY+bAreaH-by);
+        svg.append("rect").attr("x",x1).attr("y",by).attr("width",barW).attr("height",bh)
+          .attr("rx",1.5).attr("fill",COLOR_TODAY).attr("opacity",0.9);
+        svg.append("text").attr("x",x1+barW/2).attr("y",by-2)
+          .attr("text-anchor","middle").attr("font-size",7.5).attr("font-family",MONO)
+          .attr("fill","#1a5a30").text(fmt(tv));
+      }
+      if(wv!=null){
+        const by=yPos(wv), bh=Math.max(2,bAreaY+bAreaH-by);
+        svg.append("rect").attr("x",x2).attr("y",by).attr("width",barW).attr("height",bh)
+          .attr("rx",1.5).attr("fill",COLOR_WARM).attr("opacity",0.9);
+        svg.append("text").attr("x",x2+barW/2).attr("y",by-2)
+          .attr("text-anchor","middle").attr("font-size",7.5).attr("font-family",MONO)
+          .attr("fill","#6a4a00").text(fmt(wv));
+      }
+      if(tv==null&&wv==null){
+        svg.append("text").attr("x",cx(i)).attr("y",bAreaY+bAreaH/2)
+          .attr("text-anchor","middle").attr("font-size",8).attr("font-family",MONO)
+          .attr("fill","rgba(26,39,86,0.25)").text("n/a");
+      }
+    });
+  });
+
+  // Bottom border
+  const lastY=HDR_H+nM*ROW_H;
+  svg.append("line")
+    .attr("x1",0).attr("y1",lastY).attr("x2",W).attr("y2",lastY)
+    .attr("stroke","rgba(26,39,86,0.1)");
+
+  // ── REGION LABELS — use the same cx() function as bars above ──
+  FACE_REGIONS.forEach((r,i)=>{
+    const lines=r.label.split("\n");
+    lines.forEach((ln,li)=>{
+      svg.append("text")
+        .attr("x",cx(i))           // ← same formula as bars
+        .attr("y",lastY+12+li*13)
+        .attr("text-anchor","middle")
+        .attr("font-size",8.5).attr("font-family",MONO)
+        .attr("fill",li===0?"#1a2756":"#5a6a8a")
+        .text(ln);
+    });
+  });
+}
+
+function fmtVal(v,id){
+  if(v==null) return "";
+  if(id==="flood")   return v>=1000?`$${(v/1000).toFixed(0)}k`:`$${Math.round(v)}`;
+  if(id==="drought") return v.toFixed(0)+"%";
+  if(id==="snow")    return v.toFixed(0);
+  return Math.round(v).toString();
+}
+
+function wrapText(text,maxLen){
+  const words=text.split(" "), lines=[];
+  let cur="";
+  words.forEach(w=>{
+    if((cur+" "+w).length>maxLen&&cur){lines.push(cur);cur=w;}
+    else cur=cur?cur+" "+w:w;
+  });
+  if(cur) lines.push(cur);
+  return lines;
+}
+
+function showError(html){
+  document.getElementById("loading").style.display="none";
+  const el=document.getElementById("error-msg");
+  el.style.display="block"; el.innerHTML=html;
+}
+
+let rsTimer;
+window.addEventListener("resize",()=>{
+  clearTimeout(rsTimer);
+  rsTimer=setTimeout(()=>{
+    if(document.getElementById("chart-area").style.display!=="none") drawSVG();
+  },120);
+});
+
+init();
+</script>
+</body>
+</html>
