@@ -49,6 +49,17 @@
   const RIVERS_URL =
     "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_rivers_lake_centerlines.geojson";
 
+  // D3 colour scales — mirrors HAZARD_COLORS in index.html.
+  // Defined here so renderFixedCanvas can recompute county fills from data
+  // rather than trying to read them from the SVG DOM (which is unreliable
+  // because fills may be CSS variables or "transparent").
+  const EXPORT_COLOR_SCALES = {
+    heat:         () => d3.scaleSequential(d3.interpolateYlOrRd),
+    extreme_heat: () => d3.scaleSequential(d3.interpolateOrRd),
+    precip:       () => d3.scaleSequential(d3.interpolateYlGnBu),
+    wind:         () => d3.scaleSequential(d3.interpolatePuBu),
+  };
+
   const SECTOR_TOP_N       = 5;
   const COUNTY_HIGHLIGHT_N = 5;
 
@@ -800,20 +811,31 @@
 
     const pathGen = d3.geoPath().projection(exportProj);
 
-    // ── 2. Snapshot county colours from the live SVG ───────────────────────
-    // getComputedStyle resolves CSS variables (e.g. var(--bg3)) and returns
-    // actual rgb() values. getAttribute("fill") returns the raw attribute which
-    // may be "transparent" or a CSS var — neither renders in a canvas.
+    // ── 2. Compute county colours directly from data ─────────────────────
+    // Reading fills from the live SVG DOM is unreliable: D3 may have set them
+    // to "transparent" (overlay mode) or "var(--bg3)" (CSS variable). Instead
+    // we replicate the updateChoropleth() colour logic here, using the same
+    // hazard data and D3 scales, to always produce valid canvas colours.
     const countyColors = {};
-    document.querySelectorAll("#choro-svg path[data-fips]").forEach(el => {
-      const computed = window.getComputedStyle(el).fill;
-      // "rgba(0, 0, 0, 0)" = transparent (overlay-on mode) → use neutral fill
-      const isTransparent = !computed
-        || computed === "rgba(0, 0, 0, 0)"
-        || computed === "none"
-        || computed === "transparent";
-      countyColors[el.dataset.fips] = isTransparent ? "#d8dde8" : computed;
-    });
+    const _hid   = STATE.activeHazard?.id;
+    const _htype = STATE.activeHazard?.hazard_type || "heat";
+    const _hdata = STATE.hazardData?.[_hid];
+    if (_hdata) {
+      const _gwl  = STATE.activeGwl;
+      const _vals = _hdata.counties
+        .map(c => c.scenarios?.[_gwl])
+        .filter(v => v != null && !isNaN(v) && v > 0);
+      if (_vals.length) {
+        const _scaleFn = EXPORT_COLOR_SCALES[_htype] || EXPORT_COLOR_SCALES.heat;
+        const _scale   = _scaleFn().domain(d3.extent(_vals));
+        _hdata.counties.forEach(c => {
+          const v = c.scenarios?.[_gwl];
+          countyColors[c.fips] = (v != null && !isNaN(v) && v > 0)
+            ? _scale(v)
+            : "#d8dde8";
+        });
+      }
+    }
 
     // ── 3. Create output canvas ────────────────────────────────────────────
     const canvas = document.createElement("canvas");
