@@ -32,8 +32,8 @@
   const HILLSHADE_OPACITY = 0.5;
 
   // Fixed export resolution — output is always this size regardless of window
-  const EXPORT_W   = 2400;   // px  (at ~300 dpi = 8 inches wide)
-  const EXPORT_H   = 1600;   // px  (3:2 ratio suits Colorado's shape)
+  const EXPORT_W   = 1200;   // px  (at ~300 dpi = 8 inches wide)
+  const EXPORT_H   = 800;   // px  (3:2 ratio suits Colorado's shape)
   const EXPORT_PAD = 40;     // px padding inside the bounding box
 
   const CITY_DOT_RADIUS   = 5;
