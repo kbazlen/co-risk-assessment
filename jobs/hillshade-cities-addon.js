@@ -801,11 +801,18 @@
     const pathGen = d3.geoPath().projection(exportProj);
 
     // ── 2. Snapshot county colours from the live SVG ───────────────────────
-    // We read the computed fill of each path so the export always matches
-    // whatever hazard / scenario is currently on screen.
+    // getComputedStyle resolves CSS variables (e.g. var(--bg3)) and returns
+    // actual rgb() values. getAttribute("fill") returns the raw attribute which
+    // may be "transparent" or a CSS var — neither renders in a canvas.
     const countyColors = {};
     document.querySelectorAll("#choro-svg path[data-fips]").forEach(el => {
-      countyColors[el.dataset.fips] = el.getAttribute("fill") || "#d8dde8";
+      const computed = window.getComputedStyle(el).fill;
+      // "rgba(0, 0, 0, 0)" = transparent (overlay-on mode) → use neutral fill
+      const isTransparent = !computed
+        || computed === "rgba(0, 0, 0, 0)"
+        || computed === "none"
+        || computed === "transparent";
+      countyColors[el.dataset.fips] = isTransparent ? "#d8dde8" : computed;
     });
 
     // ── 3. Create output canvas ────────────────────────────────────────────
@@ -907,7 +914,23 @@
       ctx.fillText(city.name, cx + lblDx, cy + lblDy);
     });
 
-    return canvas;
+    // ── 8. Tight crop to actual Colorado pixel extent ────────────────────
+    // d3.geoPath().bounds() returns the real rendered pixel bounding box of
+    // the county features — tighter than the WGS-84 bbox rectangle.
+    const [[bx0, by0], [bx1, by1]] =
+      d3.geoPath().projection(exportProj).bounds(STATE.countyGeo);
+    const CROP_PAD = 18;   // px breathing room around the state edge
+    const cropX = Math.max(0, Math.floor(bx0) - CROP_PAD);
+    const cropY = Math.max(0, Math.floor(by0) - CROP_PAD);
+    const cropW = Math.min(EXPORT_W - cropX, Math.ceil(bx1 - bx0) + CROP_PAD * 2);
+    const cropH = Math.min(EXPORT_H - cropY, Math.ceil(by1 - by0) + CROP_PAD * 2);
+
+    const cropped = document.createElement("canvas");
+    cropped.width  = cropW;
+    cropped.height = cropH;
+    cropped.getContext("2d")
+      .drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    return cropped;
   }
 
   function canvasToBlob(canvas) {
