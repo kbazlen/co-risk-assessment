@@ -31,6 +31,11 @@
   const HILLSHADE_PX      = 1200;
   const HILLSHADE_OPACITY = 0.5;
 
+  // Fixed export resolution — output is always this size regardless of window
+  const EXPORT_W   = 2400;   // px  (at ~300 dpi = 8 inches wide)
+  const EXPORT_H   = 1600;   // px  (3:2 ratio suits Colorado's shape)
+  const EXPORT_PAD = 40;     // px padding inside the bounding box
+
   const CITY_DOT_RADIUS   = 5;
   const CITY_DOT_COLOR    = "#dc143c";
   const CITY_LABEL_SIZE   = 11;
@@ -772,6 +777,139 @@
   }
 
   // Convert a canvas to a Uint8Array PNG blob synchronously via toBlob
+  /* ══════════════════════════════════════════════════════════════════════════
+   * FIXED-SIZE MAP EXPORT
+   *
+   * Renders at EXPORT_W × EXPORT_H regardless of window size by:
+   *   1. Creating a new D3 Albers projection fitted to Colorado at that size.
+   *   2. Reading current county fill colours directly from the live SVG.
+   *   3. Re-drawing all layers (counties, hillshade, rivers, cities) onto an
+   *      offscreen canvas — no html2canvas, no window-size dependency.
+   * ══════════════════════════════════════════════════════════════════════════ */
+
+  async function renderFixedCanvas() {
+    // ── 1. Build a fresh projection at the target output size ──────────────
+    const exportProj = d3.geoAlbers()
+      .rotate([105.55, 0])
+      .center([0, 39.0])
+      .parallels([37.5, 40.5])
+      .fitExtent(
+        [[EXPORT_PAD, EXPORT_PAD], [EXPORT_W - EXPORT_PAD, EXPORT_H - EXPORT_PAD]],
+        STATE.countyGeo
+      );
+
+    const pathGen = d3.geoPath().projection(exportProj);
+
+    // ── 2. Snapshot county colours from the live SVG ───────────────────────
+    // We read the computed fill of each path so the export always matches
+    // whatever hazard / scenario is currently on screen.
+    const countyColors = {};
+    document.querySelectorAll("#choro-svg path[data-fips]").forEach(el => {
+      countyColors[el.dataset.fips] = el.getAttribute("fill") || "#d8dde8";
+    });
+
+    // ── 3. Create output canvas ────────────────────────────────────────────
+    const canvas = document.createElement("canvas");
+    canvas.width  = EXPORT_W;
+    canvas.height = EXPORT_H;
+    const ctx = canvas.getContext("2d");
+
+    // Background (matches --bg colour from the Colorado style)
+    ctx.fillStyle = "#f0f3f8";
+    ctx.fillRect(0, 0, EXPORT_W, EXPORT_H);
+
+    // ── 4. Counties ────────────────────────────────────────────────────────
+    STATE.countyGeo.features.forEach(f => {
+      const fips  = f.id.toString().padStart(5, "0");
+      const color = countyColors[fips] || "#d8dde8";
+      const dStr  = pathGen(f);
+      if (!dStr) return;
+      const p2d = new Path2D(dStr);
+      ctx.fillStyle = color;
+      ctx.fill(p2d);
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth   = 0.6;
+      ctx.stroke(p2d);
+    });
+
+    // ── 5. Hillshade (multiply blend, clipped to CO border) ────────────────
+    const hsReady = hillshadeImgSrc && hillshadeImgSrc.complete && hillshadeImgSrc.naturalWidth > 0;
+    if (hsReady) {
+      const r = projectedBBoxRect(exportProj);
+      if (r) {
+        ctx.save();
+        ctx.globalAlpha              = HILLSHADE_OPACITY;
+        ctx.globalCompositeOperation = "multiply";
+        if (coOutlineCache) {
+          ctx.clip(new Path2D(d3.geoPath().projection(exportProj)(coOutlineCache)));
+        }
+        ctx.drawImage(hillshadeImgSrc, r.x, r.y, r.w, r.h);
+        ctx.restore();
+      }
+    }
+
+    // ── 6. Rivers (optional — skipped if data not yet fetched) ────────────
+    if (riverGeoJSON && riverGeoJSON.features.length) {
+      const riverPath = d3.geoPath().projection(exportProj);
+      ctx.save();
+      if (coOutlineCache) {
+        ctx.clip(new Path2D(d3.geoPath().projection(exportProj)(coOutlineCache)));
+      }
+      riverGeoJSON.features.forEach(f => {
+        const dStr = riverPath(f);
+        if (!dStr) return;
+        const name    = (f.properties?.name || "").toLowerCase();
+        const isMajor = /colorado|arkansas|platte|rio grande|gunnison/.test(name);
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(0,0,200,0.55)";
+        ctx.lineWidth   = isMajor ? RIVER_WIDTH * 2.2 : RIVER_WIDTH * 1.3;
+        ctx.lineCap     = "round";
+        ctx.lineJoin    = "round";
+        const p2d = new Path2D(dStr);
+        ctx.stroke(p2d);
+      });
+      ctx.restore();
+    }
+
+    // ── 7. Cities ─────────────────────────────────────────────────────────
+    const dotR   = CITY_DOT_RADIUS * 1.8;
+    const lblSz  = CITY_LABEL_SIZE * 1.8;
+    const lblDx  = CITY_LABEL_OFFSET[0] * 1.8;
+    const lblDy  = CITY_LABEL_OFFSET[1] * 1.8;
+
+    CITIES.forEach(city => {
+      const pt = exportProj([city.lon, city.lat]);
+      if (!pt || isNaN(pt[0])) return;
+      const [cx, cy] = pt;
+
+      // halo behind dot
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR + 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.78)";
+      ctx.fill();
+
+      // coloured dot
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+      ctx.fillStyle   = CITY_DOT_COLOR;
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth   = 2;
+      ctx.stroke();
+
+      // label with white knockout stroke
+      ctx.font        = `700 ${lblSz}px system-ui, sans-serif`;
+      ctx.lineJoin    = "round";
+      ctx.strokeStyle = "rgba(255,255,255,0.92)";
+      ctx.lineWidth   = 4;
+      ctx.strokeText(city.name, cx + lblDx, cy + lblDy);
+      ctx.fillStyle   = "#111111";
+      ctx.fillText(city.name, cx + lblDx, cy + lblDy);
+    });
+
+    return canvas;
+  }
+
   function canvasToBlob(canvas) {
     return new Promise(resolve => canvas.toBlob(resolve, "image/png"));
   }
@@ -809,9 +947,9 @@
 
         const baseName = buildFilename().replace(".png", "");
 
-        // Capture both canvases in parallel
+        // Render map at fixed size (independent of window), legend separately
         const [mapCanvas, legendCanvas] = await Promise.all([
-          captureMapCanvas(container),
+          renderFixedCanvas(),
           captureLegendCanvas(),
         ]);
 
