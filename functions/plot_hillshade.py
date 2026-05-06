@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import rasterio
 from rasterio.transform import from_bounds
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 import xarray as xr
 
 from pathlib import Path
@@ -41,8 +42,11 @@ CITY_NAMES = [
 ]
 
 
-def _dem_to_geotiff(elev_da, lon_name, lat_name, out_path):
-    """Write an xarray DataArray DEM to a GeoTIFF (WGS84) for Whitebox."""
+def _dem_to_geotiff(elev_da, lon_name, lat_name, out_path, out_crs="EPSG:4326"):
+    """Write an xarray DataArray DEM to a GeoTIFF and optionally reproject.
+
+    Returns the bounds in the output CRS as (xmin, xmax, ymin, ymax).
+    """
     arr = elev_da.values.astype("float32")
     lons = elev_da[lon_name].values
     lats = elev_da[lat_name].values
@@ -55,16 +59,66 @@ def _dem_to_geotiff(elev_da, lon_name, lat_name, out_path):
     lon_min, lon_max = float(lons.min()), float(lons.max())
     lat_min, lat_max = float(lats.min()), float(lats.max())
     height, width = arr.shape
-    transform = from_bounds(lon_min, lat_min, lon_max, lat_max, width, height)
+    src_transform = from_bounds(lon_min, lat_min, lon_max, lat_max, width, height)
+    src_crs = "EPSG:4326"
 
+    # Write source GeoTIFF in EPSG:4326 to a temporary file path
+    src_tif = out_path + ".src.tif"
     with rasterio.open(
-        out_path, "w",
+        src_tif, "w",
         driver="GTiff", height=height, width=width, count=1,
-        dtype="float32", crs="EPSG:4326", transform=transform,
+        dtype="float32", crs=src_crs, transform=src_transform,
     ) as dst:
         dst.write(arr, 1)
 
-    return lon_min, lon_max, lat_min, lat_max
+    # If caller wants the same CRS, move src_tif -> out_path and return bounds
+    if out_crs == src_crs:
+        # rename or copy
+        try:
+            os.replace(src_tif, out_path)
+        except Exception:
+            # fallback to writing again
+            with rasterio.open(src_tif) as src:
+                profile = src.profile
+                data = src.read(1)
+            with rasterio.open(out_path, "w", **profile) as dst:
+                dst.write(data, 1)
+        with rasterio.open(out_path) as src:
+            b = src.bounds
+        return b.left, b.right, b.bottom, b.top
+
+    # Otherwise reproject to out_crs
+    dst_transform, dst_width, dst_height = calculate_default_transform(
+        src_crs, out_crs, width, height, lon_min, lat_min, lon_max, lat_max
+    )
+
+    dst_arr = np.empty((dst_height, dst_width), dtype="float32")
+    reproject(
+        source=arr,
+        destination=dst_arr,
+        src_transform=src_transform,
+        src_crs=src_crs,
+        dst_transform=dst_transform,
+        dst_crs=out_crs,
+        resampling=Resampling.bilinear,
+    )
+
+    with rasterio.open(
+        out_path, "w",
+        driver="GTiff", height=dst_height, width=dst_width, count=1,
+        dtype="float32", crs=out_crs, transform=dst_transform,
+    ) as dst:
+        dst.write(dst_arr, 1)
+
+    # remove temp source file
+    try:
+        os.remove(src_tif)
+    except Exception:
+        pass
+
+    with rasterio.open(out_path) as src:
+        b = src.bounds
+    return b.left, b.right, b.bottom, b.top
 
 
 def _whitebox_hillshade(dem_tif, hs_tif, azimuth=315.0, altitude=45.0, zfactor=1.0):
@@ -103,25 +157,26 @@ def plot_hillshade(
     shp_path = str(DATA_DIR / "cities_of_interest.shp"),
     nc_path = str(DATA_DIR / "COtopography.nc"),
     elev_var="HGT",
-lon_name="longitude",
-lat_name="latitude",
-bbox=COLORADO_BBOX,
-downsample=1,
-color_map="Greys_r",
-method="hillshade",              # was "diff_from_mean"
-filter_size=25,
-city_names="default",
-azimuth=320.0,                   # was 315.0
-altitude=25.0,                   # was 55.0
-zfactor=0.05,                    # was 0.00001
-cmap=None,
-topo_alpha=0.3,                  # was 0.6
-city_color="crimson",
-city_size=50,
-label_fontsize=9,
-label_offset=(0.04, 0.04),
-figsize=(12, 8),
-ax=None
+    lon_name="longitude",
+    lat_name="latitude",
+    bbox=COLORADO_BBOX,
+    downsample=1,
+    color_map="Greys_r",
+    method="hillshade",              # was "diff_from_mean"
+    filter_size=25,
+    city_names="default",
+    azimuth=320.0,                   # was 315.0
+    altitude=25.0,                   # was 55.0
+    zfactor=0.05,                    # was 0.00001
+    cmap=None,
+    topo_alpha=0.3,                  # was 0.6
+    city_color="crimson",
+    city_size=50,
+    label_fontsize=9,
+    label_offset=(0.04, 0.04),
+    figsize=(12, 8),
+    ax=None,
+    target_crs="EPSG:3857",
 ):
     """Plot a Whitebox hillshade under city points + labels.
 
@@ -179,6 +234,17 @@ ax=None
 
     # --- Load ---
     cities = gpd.read_file(shp_path)
+    # Ensure cities have a CRS; assume WGS84 if missing, then reproject
+    try:
+        if cities.crs is None:
+            cities = cities.set_crs("EPSG:4326", allow_override=True)
+    except Exception:
+        pass
+    try:
+        cities = cities.to_crs(target_crs)
+    except Exception:
+        # if to_crs fails, keep original (likely already in target CRS)
+        pass
     ds = xr.open_dataset(nc_path)
     elev = ds[elev_var]
 
@@ -203,8 +269,12 @@ ax=None
     with tempfile.TemporaryDirectory() as tmp:
         dem_tif = os.path.join(tmp, "dem.tif")
         out_tif = os.path.join(tmp, "out.tif")
-        lon_min, lon_max, lat_min, lat_max = _dem_to_geotiff(
-            elev, lon_name, lat_name, dem_tif,
+        # if requested CRS is projected (meters), prefer zfactor=1.0 for hillshade
+        if target_crs and target_crs.upper().endswith("3857") and zfactor == 0.05:
+            zfactor = 1.0
+
+        xmin, xmax, ymin, ymax = _dem_to_geotiff(
+            elev, lon_name, lat_name, dem_tif, out_crs=target_crs,
         )
         if method == "hillshade":
             _whitebox_hillshade(dem_tif, out_tif, azimuth, altitude, zfactor)
@@ -222,7 +292,7 @@ ax=None
             if nodata is not None:
                 terrain = np.where(terrain == nodata, np.nan, terrain)
 
-    extent = (lon_min, lon_max, lat_min, lat_max)
+    extent = (xmin, xmax, ymin, ymax)
 
     # --- Plot ---
     if ax is None:
@@ -251,8 +321,10 @@ ax=None
 
     # Filter cities (and names) to what's in view
     if bbox is not None:
+        # bbox was provided in lon/lat; when cities are reprojected, filter by
+        # the DEM's projected bounds (xmin/xmax/ymin/ymax)
         in_mask = cities.geometry.apply(
-            lambda g: lon_min <= g.x <= lon_max and lat_min <= g.y <= lat_max
+            lambda g: xmin <= g.x <= xmax and ymin <= g.y <= ymax
         )
         view_cities = cities[in_mask].reset_index(drop=True)
         view_names = (
@@ -271,6 +343,16 @@ ax=None
     # Labels
     if view_names is not None:
         dx, dy = label_offset
+        # If plotting in projected meters, convert small-degree offsets into meters
+        if target_crs and target_crs.upper().endswith("3857"):
+            try:
+                # only convert if offset looks like degrees (<1)
+                if abs(dx) < 1 and abs(dy) < 1:
+                    mid_lat_deg = 0.5 * (bbox[1] + bbox[3]) if bbox is not None else 0.0
+                    dx = dx * 111320.0 * np.cos(np.deg2rad(mid_lat_deg))
+                    dy = dy * 110574.0
+            except Exception:
+                pass
         for (_, row), name in zip(view_cities.iterrows(), view_names):
             ax.annotate(
                 name,
@@ -283,11 +365,13 @@ ax=None
 
     ax.set_xlim(extent[0], extent[1])
     ax.set_ylim(extent[2], extent[3])
-    # For lon/lat plots, 1 degree of lon != 1 degree of lat. At ~39 N,
-    # 1 deg lon ~ 86 km but 1 deg lat ~ 111 km. Using aspect='equal' would
-    # stretch the map horizontally by ~29%. Correct with 1/cos(mid-latitude).
-    mid_lat = 0.5 * (extent[2] + extent[3])
-    ax.set_aspect(1.0 / np.cos(np.deg2rad(mid_lat)))
+    # Aspect: if working in geographic lon/lat, correct by cos(mid-lat); for
+    # projected CRS (meters) use equal aspect.
+    if target_crs and target_crs.upper().endswith("4326"):
+        mid_lat = 0.5 * (extent[2] + extent[3])
+        ax.set_aspect(1.0 / np.cos(np.deg2rad(mid_lat)))
+    else:
+        ax.set_aspect('equal')
     ax.set_axis_off()
 
     ds.close()
@@ -296,5 +380,3 @@ ax=None
 
 if __name__ == "__main__":
     fig, ax = plot_hillshade()
-
-
