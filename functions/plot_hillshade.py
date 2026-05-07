@@ -167,9 +167,9 @@ def plot_hillshade(
     city_names="default",
     azimuth=320.0,                   # was 315.0
     altitude=25.0,                   # was 55.0
-    zfactor=0.05,                    # was 0.00001
+    zfactor=1,                    # was 0.00001
     cmap=None,
-    topo_alpha=0.3,                  # was 0.6
+    topo_alpha=1,                  # was 0.6
     city_color="crimson",
     city_size=50,
     label_fontsize=9,
